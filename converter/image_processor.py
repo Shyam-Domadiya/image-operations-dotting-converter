@@ -337,128 +337,366 @@ class ImageProcessor:
     
     def render_dots(self, canvas: np.ndarray, grayscale_image: np.ndarray) -> np.ndarray:
         """
-        Render dots with maximum accuracy using advanced sampling and positioning.
-        Implements sub-pixel positioning, adaptive opacity, and enhanced quality algorithms.
+        Render dots with maximum accuracy using advanced sampling, positioning, and enhanced algorithms.
+        Implements multi-pass rendering, improved brightness mapping, and superior visual quality.
         
         Args:
             canvas: Fresh canvas to draw on
             grayscale_image: Grayscale version of original image
             
         Returns:
-            Canvas with highest-quality dots rendered
+            Canvas with highest-quality dots rendered with enhanced accuracy
         """
-        # Apply advanced blur with edge preservation
-        processed_image = self._apply_gaussian_blur(grayscale_image)
+        # Step 1: Apply enhanced preprocessing for better accuracy
+        processed_image = self._apply_enhanced_preprocessing(grayscale_image)
         
-        # Calculate adaptive grid dimensions
+        # Step 2: Calculate adaptive grid dimensions with improved accuracy
         grid_rows, grid_cols = self.create_grid(grayscale_image.shape)
         
         # Get adaptive spacing for this image
         height, width = grayscale_image.shape
         adaptive_spacing = self._calculate_adaptive_spacing(width, height)
         
-        # Determine dot color and create floating point canvas for sub-pixel accuracy
+        # Step 3: Create high-precision floating point canvas
         if self.parameters.color_mode == 'black_on_white':
-            dot_color = (0, 0, 0)  # Black dots
             float_canvas = np.full(canvas.shape, 255.0, dtype=np.float32)
         else:
-            dot_color = (255, 255, 255)  # White dots
             float_canvas = np.zeros(canvas.shape, dtype=np.float32)
         
-        # Pre-calculate brightness statistics for adaptive processing
-        all_brightness = []
-        brightness_map = np.zeros((grid_rows, grid_cols))
+        # Step 4: Enhanced brightness analysis with local statistics
+        brightness_map, local_stats = self._analyze_brightness_distribution(
+            processed_image, grid_rows, grid_cols, adaptive_spacing
+        )
         
+        # Step 5: Set deterministic random seed for consistent results
+        np.random.seed(hash(str(self.parameters.__dict__)) % 2**32)
+        
+        # Step 6: Multi-pass rendering for enhanced accuracy
+        # Pass 1: Large dots for main structure
+        self._render_dot_pass(float_canvas, brightness_map, local_stats, 
+                             grid_rows, grid_cols, adaptive_spacing, 
+                             height, width, pass_type='main')
+        
+        # Pass 2: Medium dots for detail enhancement
+        self._render_dot_pass(float_canvas, brightness_map, local_stats, 
+                             grid_rows, grid_cols, adaptive_spacing, 
+                             height, width, pass_type='detail')
+        
+        # Step 7: Apply final enhancement for superior visual quality
+        enhanced_canvas = self._apply_final_enhancement(float_canvas)
+        
+        # Convert back to uint8 with proper clipping
+        final_canvas = np.clip(enhanced_canvas, 0, 255).astype(np.uint8)
+        
+        return final_canvas
+    
+    def _apply_enhanced_preprocessing(self, grayscale_image: np.ndarray) -> np.ndarray:
+        """
+        Apply enhanced preprocessing for superior dot placement accuracy.
+        
+        Args:
+            grayscale_image: Input grayscale image
+            
+        Returns:
+            Enhanced preprocessed image
+        """
+        # Apply bilateral filter for edge-preserving smoothing
+        processed = self._apply_gaussian_blur(grayscale_image)
+        
+        # Apply CLAHE for local contrast enhancement
+        clahe = cv2.createCLAHE(clipLimit=1.5, tileGridSize=(8, 8))
+        enhanced = clahe.apply(processed.astype(np.uint8))
+        
+        # Apply subtle sharpening for better edge definition
+        kernel = np.array([[-1, -1, -1], [-1, 9, -1], [-1, -1, -1]]) * 0.1
+        sharpened = cv2.filter2D(enhanced, -1, kernel)
+        
+        # Blend original with enhanced version
+        final = cv2.addWeighted(enhanced, 0.7, sharpened, 0.3, 0)
+        
+        return final.astype(np.float32)
+    
+    def _analyze_brightness_distribution(self, processed_image: np.ndarray, 
+                                       grid_rows: int, grid_cols: int, 
+                                       adaptive_spacing: int) -> tuple:
+        """
+        Analyze brightness distribution with local statistics for enhanced accuracy.
+        
+        Args:
+            processed_image: Preprocessed image
+            grid_rows: Number of grid rows
+            grid_cols: Number of grid columns
+            adaptive_spacing: Spacing between dots
+            
+        Returns:
+            Tuple of (brightness_map, local_statistics)
+        """
+        brightness_map = np.zeros((grid_rows, grid_cols), dtype=np.float32)
+        all_brightness = []
+        
+        # Calculate brightness for each grid cell
         for row in range(grid_rows):
             for col in range(grid_cols):
                 brightness = self.calculate_brightness(processed_image, row, col, adaptive_spacing)
                 brightness_map[row, col] = brightness
                 all_brightness.append(brightness)
         
-        # Calculate brightness statistics for adaptive contrast
+        # Calculate comprehensive statistics
         brightness_array = np.array(all_brightness)
-        brightness_mean = np.mean(brightness_array)
-        brightness_std = np.std(brightness_array)
+        local_stats = {
+            'mean': np.mean(brightness_array),
+            'std': np.std(brightness_array),
+            'min': np.min(brightness_array),
+            'max': np.max(brightness_array),
+            'median': np.median(brightness_array),
+            'q25': np.percentile(brightness_array, 25),
+            'q75': np.percentile(brightness_array, 75)
+        }
         
-        # Set random seed for consistent jitter patterns
-        np.random.seed(42)
+        return brightness_map, local_stats
+    
+    def _render_dot_pass(self, float_canvas: np.ndarray, brightness_map: np.ndarray,
+                        local_stats: dict, grid_rows: int, grid_cols: int,
+                        adaptive_spacing: int, height: int, width: int, 
+                        pass_type: str = 'main'):
+        """
+        Render a single pass of dots with specific characteristics.
         
-        # Render dots with enhanced accuracy
+        Args:
+            float_canvas: Canvas to draw on
+            brightness_map: Pre-calculated brightness values
+            local_stats: Local brightness statistics
+            grid_rows: Number of grid rows
+            grid_cols: Number of grid columns
+            adaptive_spacing: Spacing between dots
+            height: Image height
+            width: Image width
+            pass_type: Type of pass ('main' or 'detail')
+        """
+        # Configure pass-specific parameters
+        if pass_type == 'main':
+            size_multiplier = 1.0
+            opacity_multiplier = 1.0
+            jitter_factor = 0.03
+        else:  # detail pass
+            size_multiplier = 0.6
+            opacity_multiplier = 0.4
+            jitter_factor = 0.08
+        
         for row in range(grid_rows):
             for col in range(grid_cols):
                 brightness = brightness_map[row, col]
                 
-                # Apply local contrast enhancement
-                if brightness_std > 0:
-                    # Normalize brightness relative to local statistics
-                    contrast_enhanced = brightness + 0.3 * (brightness - brightness_mean)
-                    brightness = np.clip(contrast_enhanced, 0, 255)
+                # Enhanced local contrast adjustment
+                contrast_enhanced = self._apply_local_contrast_enhancement(
+                    brightness, local_stats, row, col, grid_rows, grid_cols
+                )
                 
-                # Calculate radius with advanced scaling
-                radius = self.scale_dot_radius(brightness, self.parameters.color_mode)
+                # Calculate radius with enhanced scaling
+                base_radius = self.scale_dot_radius(contrast_enhanced, self.parameters.color_mode)
+                radius = base_radius * size_multiplier
                 
-                # Skip dots that are too small to be meaningful
-                if radius < 0.5:
+                # Skip very small dots
+                if radius < 0.8:
                     continue
                 
-                # Calculate sub-pixel precise dot center position
-                # Add slight random offset for more natural appearance
-                base_center_y = row * adaptive_spacing + adaptive_spacing / 2.0
-                base_center_x = col * adaptive_spacing + adaptive_spacing / 2.0
+                # Calculate precise dot center with enhanced positioning
+                center_y, center_x = self._calculate_enhanced_dot_position(
+                    row, col, adaptive_spacing, jitter_factor, radius, height, width
+                )
                 
-                # Add subtle jitter for more organic appearance (±10% of spacing)
-                jitter_range = adaptive_spacing * 0.05
-                center_y = base_center_y + np.random.uniform(-jitter_range, jitter_range)
-                center_x = base_center_x + np.random.uniform(-jitter_range, jitter_range)
+                # Calculate enhanced opacity
+                opacity = self._calculate_enhanced_opacity(
+                    contrast_enhanced, local_stats, opacity_multiplier
+                )
                 
-                # Ensure centers stay within image bounds
-                center_y = np.clip(center_y, radius, height - radius - 1)
-                center_x = np.clip(center_x, radius, width - radius - 1)
-                
-                # Calculate adaptive opacity based on brightness - CORRECTED LOGIC
-                if self.parameters.color_mode == 'black_on_white':
-                    # For black dots on white background: darker areas get larger/more opaque dots
-                    opacity = 1.0 - (brightness / 255.0)
-                else:
-                    # For white dots on black background: darker areas should get larger/more opaque white dots
-                    # This is the OPPOSITE of what was implemented - we want white dots where the original is dark
-                    opacity = 1.0 - (brightness / 255.0)
-                
-                # Apply minimum opacity threshold
-                opacity = max(0.1, opacity)
-                
-                # Clamp radius to prevent excessive overlap while allowing some overlap for realism
-                max_allowed_radius = adaptive_spacing * 0.6  # Allow 60% of spacing
+                # Clamp radius for optimal visual quality
+                max_allowed_radius = adaptive_spacing * 0.55
                 final_radius = min(radius, max_allowed_radius)
                 
-                # Draw dot with sub-pixel accuracy and variable opacity - CORRECTED LOGIC
+                # Draw dot with enhanced quality
+                self._draw_enhanced_dot(float_canvas, center_x, center_y, 
+                                      final_radius, opacity, pass_type)
+    
+    def _apply_local_contrast_enhancement(self, brightness: float, local_stats: dict,
+                                        row: int, col: int, grid_rows: int, grid_cols: int) -> float:
+        """
+        Apply sophisticated local contrast enhancement for better accuracy.
+        
+        Args:
+            brightness: Original brightness value
+            local_stats: Local brightness statistics
+            row: Grid row
+            col: Grid column
+            grid_rows: Total grid rows
+            grid_cols: Total grid columns
+            
+        Returns:
+            Enhanced brightness value
+        """
+        # Calculate position-based weight (center gets more enhancement)
+        center_row, center_col = grid_rows // 2, grid_cols // 2
+        distance_from_center = np.sqrt((row - center_row)**2 + (col - center_col)**2)
+        max_distance = np.sqrt(center_row**2 + center_col**2)
+        center_weight = 1.0 - (distance_from_center / max_distance) * 0.3
+        
+        # Apply adaptive contrast enhancement
+        if local_stats['std'] > 0:
+            # Normalize relative to local statistics
+            normalized = (brightness - local_stats['mean']) / local_stats['std']
+            
+            # Apply S-curve for better contrast
+            s_curve = np.tanh(normalized * 0.5) * local_stats['std'] + local_stats['mean']
+            
+            # Blend with original based on center weight
+            enhanced = brightness * (1 - center_weight * 0.4) + s_curve * (center_weight * 0.4)
+        else:
+            enhanced = brightness
+        
+        return np.clip(enhanced, 0, 255)
+    
+    def _calculate_enhanced_dot_position(self, row: int, col: int, adaptive_spacing: int,
+                                       jitter_factor: float, radius: float, 
+                                       height: int, width: int) -> tuple:
+        """
+        Calculate enhanced dot position with improved accuracy.
+        
+        Args:
+            row: Grid row
+            col: Grid column
+            adaptive_spacing: Spacing between dots
+            jitter_factor: Amount of random jitter
+            radius: Dot radius
+            height: Image height
+            width: Image width
+            
+        Returns:
+            Tuple of (center_y, center_x)
+        """
+        # Calculate base position
+        base_center_y = row * adaptive_spacing + adaptive_spacing / 2.0
+        base_center_x = col * adaptive_spacing + adaptive_spacing / 2.0
+        
+        # Apply controlled jitter for natural appearance
+        jitter_range = adaptive_spacing * jitter_factor
+        center_y = base_center_y + np.random.uniform(-jitter_range, jitter_range)
+        center_x = base_center_x + np.random.uniform(-jitter_range, jitter_range)
+        
+        # Ensure dots stay within image bounds with proper margin
+        margin = max(radius + 1, 2)
+        center_y = np.clip(center_y, margin, height - margin)
+        center_x = np.clip(center_x, margin, width - margin)
+        
+        return center_y, center_x
+    
+    def _calculate_enhanced_opacity(self, brightness: float, local_stats: dict, 
+                                  opacity_multiplier: float) -> float:
+        """
+        Calculate enhanced opacity for superior visual accuracy.
+        
+        Args:
+            brightness: Enhanced brightness value
+            local_stats: Local brightness statistics
+            opacity_multiplier: Multiplier for this pass
+            
+        Returns:
+            Enhanced opacity value
+        """
+        # Base opacity calculation (darker areas = higher opacity)
+        base_opacity = 1.0 - (brightness / 255.0)
+        
+        # Apply dynamic range expansion
+        if local_stats['max'] > local_stats['min']:
+            range_normalized = (brightness - local_stats['min']) / (local_stats['max'] - local_stats['min'])
+            range_enhanced = 1.0 - range_normalized
+            
+            # Blend base and range-enhanced opacity
+            enhanced_opacity = base_opacity * 0.7 + range_enhanced * 0.3
+        else:
+            enhanced_opacity = base_opacity
+        
+        # Apply pass-specific multiplier
+        final_opacity = enhanced_opacity * opacity_multiplier
+        
+        # Ensure minimum visibility
+        return max(0.05, min(1.0, final_opacity))
+    
+    def _draw_enhanced_dot(self, float_canvas: np.ndarray, center_x: float, center_y: float,
+                          radius: float, opacity: float, pass_type: str):
+        """
+        Draw a single dot with enhanced quality and accuracy.
+        
+        Args:
+            float_canvas: Canvas to draw on
+            center_x: X coordinate of dot center
+            center_y: Y coordinate of dot center
+            radius: Dot radius
+            opacity: Dot opacity
+            pass_type: Type of rendering pass
+        """
+        # Calculate dot intensity based on color mode
+        if self.parameters.color_mode == 'black_on_white':
+            # Black dots: lower intensity = darker
+            dot_intensity = 255 * (1 - opacity)
+        else:
+            # White dots: higher intensity = brighter
+            dot_intensity = 255 * opacity
+        
+        # Apply different rendering techniques based on pass type
+        if pass_type == 'main':
+            # Main pass: solid dots with anti-aliasing
+            cv2.circle(
+                float_canvas,
+                (int(center_x), int(center_y)),
+                int(radius),
+                (dot_intensity, dot_intensity, dot_intensity),
+                -1,  # Filled circle
+                cv2.LINE_AA  # Anti-aliasing
+            )
+        else:
+            # Detail pass: softer dots with gradient effect
+            # Create a soft gradient dot
+            for r in range(int(radius), 0, -1):
+                gradient_opacity = opacity * (r / radius) * 0.3
                 if self.parameters.color_mode == 'black_on_white':
-                    # Black dots on white background: darker areas get darker dots
-                    dot_intensity = 255 * (1 - opacity)  # Lower values = darker dots
-                    cv2.circle(
-                        float_canvas, 
-                        (int(center_x), int(center_y)), 
-                        int(final_radius), 
-                        (dot_intensity, dot_intensity, dot_intensity), 
-                        -1,  # Filled circle
-                        cv2.LINE_AA  # Anti-aliasing
-                    )
+                    gradient_intensity = 255 * (1 - gradient_opacity)
                 else:
-                    # White dots on black background: darker areas get brighter white dots
-                    dot_intensity = 255 * opacity  # Higher values = brighter white dots
-                    cv2.circle(
-                        float_canvas, 
-                        (int(center_x), int(center_y)), 
-                        int(final_radius), 
-                        (dot_intensity, dot_intensity, dot_intensity), 
-                        -1,  # Filled circle
-                        cv2.LINE_AA  # Anti-aliasing
-                    )
+                    gradient_intensity = 255 * gradient_opacity
+                
+                cv2.circle(
+                    float_canvas,
+                    (int(center_x), int(center_y)),
+                    r,
+                    (gradient_intensity, gradient_intensity, gradient_intensity),
+                    1,  # Thin circle
+                    cv2.LINE_AA
+                )
+    
+    def _apply_final_enhancement(self, float_canvas: np.ndarray) -> np.ndarray:
+        """
+        Apply final enhancement for superior visual quality.
         
-        # Convert back to uint8 with proper clipping
-        final_canvas = np.clip(float_canvas, 0, 255).astype(np.uint8)
+        Args:
+            float_canvas: Rendered canvas
+            
+        Returns:
+            Enhanced final canvas
+        """
+        # Convert to uint8 for processing
+        temp_canvas = np.clip(float_canvas, 0, 255).astype(np.uint8)
         
-        return final_canvas
+        # Apply subtle smoothing to reduce artifacts
+        smoothed = cv2.bilateralFilter(temp_canvas, 5, 10, 10)
+        
+        # Blend original with smoothed for natural appearance
+        enhanced = cv2.addWeighted(temp_canvas, 0.85, smoothed, 0.15, 0)
+        
+        # Apply final contrast adjustment
+        alpha = 1.05  # Slight contrast boost
+        beta = 2      # Minimal brightness adjustment
+        final = cv2.convertScaleAbs(enhanced, alpha=alpha, beta=beta)
+        
+        return final.astype(np.float32)
     
     def _calculate_optimal_max_dimension(self, width: int, height: int) -> int:
         """
