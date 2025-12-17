@@ -1,5 +1,5 @@
 """
-Core image processing functionality for the dotting converter.
+Core image processing functionality for the dotting converter and pencil sketch converter.
 Enhanced with maximum accuracy and advanced visual quality algorithms.
 """
 import cv2
@@ -678,6 +678,350 @@ class ImageProcessor:
             return self._save_image(canvas, output_path)
             
         except Exception:
+            return False
+    
+    def _save_image(self, image: np.ndarray, output_path: str) -> bool:
+        """Save image with appropriate quality settings and detailed error handling."""
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        try:
+            # Ensure output directory exists
+            output_dir = os.path.dirname(output_path)
+            if output_dir and not os.path.exists(output_dir):
+                os.makedirs(output_dir, exist_ok=True)
+            
+            # Save with appropriate format settings
+            if output_path.lower().endswith('.jpg') or output_path.lower().endswith('.jpeg'):
+                # Save JPEG with high quality
+                success = cv2.imwrite(output_path, image, [cv2.IMWRITE_JPEG_QUALITY, 95])
+                logger.debug(f"Saving as JPEG with quality 95")
+            elif output_path.lower().endswith('.png'):
+                # Save PNG with compression
+                success = cv2.imwrite(output_path, image, [cv2.IMWRITE_PNG_COMPRESSION, 6])
+                logger.debug(f"Saving as PNG with compression 6")
+            else:
+                # Default save
+                success = cv2.imwrite(output_path, image)
+                logger.debug(f"Saving with default settings")
+            
+            if not success:
+                logger.error(f"cv2.imwrite returned False for {output_path}")
+                return False
+            
+            # Verify output file was created and has reasonable size
+            if os.path.exists(output_path):
+                file_size = os.path.getsize(output_path)
+                if file_size > 0:
+                    logger.debug(f"Successfully saved image: {output_path} ({file_size} bytes)")
+                    return True
+                else:
+                    logger.error(f"Output file has zero size: {output_path}")
+                    return False
+            else:
+                logger.error(f"Output file was not created: {output_path}")
+                return False
+            
+        except OSError as e:
+            logger.error(f"File system error saving image: {str(e)}")
+            return False
+        except cv2.error as e:
+            logger.error(f"OpenCV error saving image: {str(e)}")
+            return False
+        except Exception as e:
+            logger.error(f"Unexpected error saving image: {str(e)}")
+            return False
+
+
+class PencilSketchProcessor:
+    """Core class for converting images to realistic pencil sketches."""
+    
+    def __init__(self):
+        """Initialize the pencil sketch processor."""
+        pass
+    
+    def process_image(self, input_path: str, output_path: str) -> bool:
+        """
+        Complete pencil sketch processing pipeline with enhanced error handling.
+        Uses PIL for image loading and auto-resizes large images while maintaining aspect ratio.
+        
+        Args:
+            input_path: Path to input image
+            output_path: Path to save output image
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        import logging
+        from PIL import Image
+        
+        logger = logging.getLogger(__name__)
+        
+        try:
+            # Validate input file exists
+            if not os.path.exists(input_path):
+                logger.error(f"Input file does not exist: {input_path}")
+                return False
+            
+            # Load image using PIL (more reliable than cv2.imread)
+            try:
+                with Image.open(input_path) as pil_image:
+                    # Convert to RGB to ensure consistent format
+                    pil_image = pil_image.convert("RGB")
+                    
+                    # Get original dimensions
+                    original_width, original_height = pil_image.size
+                    logger.info(f"Original image size: {original_width}x{original_height}")
+                    
+                    # Auto-resize large images safely (no resolution rejection)
+                    max_dimension = self._calculate_optimal_max_dimension(original_width, original_height)
+                    
+                    if original_width > max_dimension or original_height > max_dimension:
+                        # Calculate new dimensions maintaining aspect ratio
+                        if original_width > original_height:
+                            new_width = max_dimension
+                            new_height = int((original_height * max_dimension) / original_width)
+                        else:
+                            new_height = max_dimension
+                            new_width = int((original_width * max_dimension) / original_height)
+                        
+                        # Resize using high-quality resampling
+                        pil_image = pil_image.resize((new_width, new_height), Image.Resampling.LANCZOS)
+                        logger.info(f"Resized image to: {new_width}x{new_height}")
+                    
+                    # Convert PIL image to NumPy array for OpenCV processing
+                    image_array = np.array(pil_image)
+                    
+                    # Convert RGB to BGR for OpenCV (OpenCV uses BGR format)
+                    image_bgr = cv2.cvtColor(image_array, cv2.COLOR_RGB2BGR)
+                    
+            except Exception as e:
+                logger.error(f"Failed to load image with PIL: {str(e)}")
+                return False
+            
+            # Validate image dimensions
+            height, width = image_bgr.shape[:2]
+            if height <= 0 or width <= 0:
+                logger.error(f"Invalid image dimensions: {width}x{height}")
+                return False
+            
+            # Process the image using pencil sketch pipeline
+            success = self._process_pencil_sketch(image_bgr, output_path)
+            
+            if success:
+                logger.info(f"Successfully processed pencil sketch: {input_path} -> {output_path}")
+            else:
+                logger.error(f"Failed to process pencil sketch: {input_path}")
+            
+            return success
+            
+        except Exception as e:
+            logger.error(f"Unexpected error processing pencil sketch {input_path}: {str(e)}")
+            return False
+    
+    def _calculate_optimal_max_dimension(self, width: int, height: int) -> int:
+        """
+        Calculate optimal maximum dimension for resizing based on image characteristics.
+        Ensures no resolution rejection while maintaining processing efficiency.
+        
+        Args:
+            width: Original image width
+            height: Original image height
+            
+        Returns:
+            Optimal maximum dimension for resizing
+        """
+        # Calculate total pixels
+        total_pixels = width * height
+        
+        # Define thresholds and corresponding max dimensions
+        if total_pixels <= 500000:  # <= 0.5MP
+            return 1200  # Small images can be processed at higher resolution
+        elif total_pixels <= 2000000:  # <= 2MP
+            return 1500  # Medium images
+        elif total_pixels <= 8000000:  # <= 8MP
+            return 1800  # Large images
+        else:
+            return 2000  # Very large images - still process but with reasonable limit
+        
+        # Note: No image is rejected due to size - all are processed
+    
+    def _process_pencil_sketch(self, image: np.ndarray, output_path: str) -> bool:
+        """
+        Process image using advanced pencil sketch pipeline for highly realistic results.
+        Implements multi-stage processing with edge enhancement and texture simulation.
+        
+        Args:
+            image: Input image as numpy array (BGR format)
+            output_path: Path to save output image
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        try:
+            # Step 1: Convert image to grayscale with enhanced luminance calculation
+            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+            logger.debug("Successfully converted image to grayscale")
+            
+            # Step 2: Apply noise reduction while preserving edges
+            # Use bilateral filter to smooth while keeping edges sharp
+            height, width = gray.shape
+            area = height * width
+            
+            # Adaptive bilateral filter parameters based on image size
+            if area > 2000000:  # > 2MP
+                d_bilateral = 15
+                sigma_color = 80
+                sigma_space = 80
+            elif area > 1000000:  # > 1MP
+                d_bilateral = 12
+                sigma_color = 70
+                sigma_space = 70
+            else:
+                d_bilateral = 9
+                sigma_color = 60
+                sigma_space = 60
+            
+            denoised = cv2.bilateralFilter(gray, d_bilateral, sigma_color, sigma_space)
+            logger.debug("Applied bilateral filter for noise reduction")
+            
+            # Step 3: Enhance contrast using CLAHE (Contrast Limited Adaptive Histogram Equalization)
+            clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+            enhanced = clahe.apply(denoised)
+            logger.debug("Applied CLAHE for contrast enhancement")
+            
+            # Step 4: Create multiple edge maps for realistic pencil strokes
+            # Sobel edges for directional strokes
+            sobel_x = cv2.Sobel(enhanced, cv2.CV_64F, 1, 0, ksize=3)
+            sobel_y = cv2.Sobel(enhanced, cv2.CV_64F, 0, 1, ksize=3)
+            sobel_combined = np.sqrt(sobel_x**2 + sobel_y**2)
+            sobel_edges = np.uint8(np.clip(sobel_combined, 0, 255))
+            
+            # Canny edges for fine details
+            # Adaptive thresholds based on image statistics
+            median_val = np.median(enhanced)
+            lower_thresh = int(max(0, 0.7 * median_val))
+            upper_thresh = int(min(255, 1.3 * median_val))
+            canny_edges = cv2.Canny(enhanced, lower_thresh, upper_thresh)
+            
+            logger.debug("Created edge maps using Sobel and Canny")
+            
+            # Step 5: Invert grayscale image for blending
+            inverted_gray = 255 - enhanced
+            logger.debug("Successfully inverted enhanced grayscale image")
+            
+            # Step 6: Apply adaptive Gaussian blur to inverted image
+            # Multiple blur levels for different stroke effects
+            if area > 2000000:  # > 2MP
+                blur_kernel_1 = 25  # Main blur
+                blur_kernel_2 = 15  # Detail blur
+                blur_kernel_3 = 7   # Fine detail blur
+            elif area > 1000000:  # > 1MP
+                blur_kernel_1 = 19
+                blur_kernel_2 = 11
+                blur_kernel_3 = 5
+            else:
+                blur_kernel_1 = 13
+                blur_kernel_2 = 7
+                blur_kernel_3 = 3
+            
+            # Ensure all kernel sizes are odd
+            blur_kernel_1 = blur_kernel_1 if blur_kernel_1 % 2 == 1 else blur_kernel_1 + 1
+            blur_kernel_2 = blur_kernel_2 if blur_kernel_2 % 2 == 1 else blur_kernel_2 + 1
+            blur_kernel_3 = blur_kernel_3 if blur_kernel_3 % 2 == 1 else blur_kernel_3 + 1
+            
+            # Create multiple blur layers for depth
+            blur_1 = cv2.GaussianBlur(inverted_gray, (blur_kernel_1, blur_kernel_1), 0)
+            blur_2 = cv2.GaussianBlur(inverted_gray, (blur_kernel_2, blur_kernel_2), 0)
+            blur_3 = cv2.GaussianBlur(inverted_gray, (blur_kernel_3, blur_kernel_3), 0)
+            
+            # Combine blurs with different weights for natural variation
+            combined_blur = cv2.addWeighted(blur_1, 0.5, blur_2, 0.3, 0)
+            combined_blur = cv2.addWeighted(combined_blur, 0.8, blur_3, 0.2, 0)
+            
+            logger.debug(f"Applied multi-level Gaussian blur")
+            
+            # Step 7: Create base sketch using divide blend
+            sketch_base = cv2.divide(enhanced, 255 - combined_blur, scale=256)
+            logger.debug("Created base sketch using divide blend")
+            
+            # Step 8: Enhance with edge information for realistic pencil strokes
+            # Combine Sobel and Canny edges
+            combined_edges = cv2.addWeighted(sobel_edges, 0.6, canny_edges, 0.4, 0)
+            
+            # Invert edges so dark lines appear on light background
+            inverted_edges = 255 - combined_edges
+            
+            # Blend sketch with edge information
+            sketch_with_edges = cv2.multiply(sketch_base, inverted_edges, scale=1/255.0)
+            sketch_with_edges = np.uint8(np.clip(sketch_with_edges, 0, 255))
+            
+            logger.debug("Enhanced sketch with edge information")
+            
+            # Step 9: Apply texture simulation for paper-like appearance
+            # Create subtle texture using noise
+            texture_noise = np.random.normal(0, 3, (height, width)).astype(np.float32)
+            texture_noise = cv2.GaussianBlur(texture_noise, (3, 3), 0)
+            
+            # Add texture to sketch
+            textured_sketch = sketch_with_edges.astype(np.float32) + texture_noise
+            textured_sketch = np.clip(textured_sketch, 0, 255).astype(np.uint8)
+            
+            logger.debug("Applied paper texture simulation")
+            
+            # Step 10: Final contrast and brightness adjustments
+            # Adaptive adjustments based on image characteristics
+            mean_brightness = np.mean(textured_sketch)
+            
+            if mean_brightness < 100:  # Dark image
+                alpha = 1.3  # Higher contrast
+                beta = 20    # More brightness
+            elif mean_brightness > 180:  # Bright image
+                alpha = 1.1  # Lower contrast
+                beta = 5     # Less brightness
+            else:  # Normal image
+                alpha = 1.2  # Moderate contrast
+                beta = 12    # Moderate brightness
+            
+            final_sketch = cv2.convertScaleAbs(textured_sketch, alpha=alpha, beta=beta)
+            
+            # Step 11: Apply final sharpening for crisp pencil lines
+            # Create sharpening kernel
+            sharpening_kernel = np.array([[-1, -1, -1],
+                                        [-1,  9, -1],
+                                        [-1, -1, -1]])
+            
+            # Apply subtle sharpening
+            sharpened = cv2.filter2D(final_sketch, -1, sharpening_kernel * 0.3)
+            
+            # Blend original with sharpened for natural look
+            final_sketch = cv2.addWeighted(final_sketch, 0.7, sharpened, 0.3, 0)
+            
+            # Ensure values are in valid range
+            final_sketch = np.clip(final_sketch, 0, 255).astype(np.uint8)
+            
+            logger.debug("Applied final contrast, brightness, and sharpening adjustments")
+            
+            # Step 12: Convert back to 3-channel image for consistent output format
+            final_sketch_bgr = cv2.cvtColor(final_sketch, cv2.COLOR_GRAY2BGR)
+            
+            # Save result with quality settings
+            success = self._save_image(final_sketch_bgr, output_path)
+            if success:
+                logger.debug(f"Successfully saved enhanced pencil sketch to: {output_path}")
+            else:
+                logger.error(f"Failed to save pencil sketch to: {output_path}")
+            
+            return success
+            
+        except cv2.error as e:
+            logger.error(f"OpenCV error during pencil sketch processing: {str(e)}")
+            return False
+        except Exception as e:
+            logger.error(f"Unexpected error during pencil sketch processing: {str(e)}")
             return False
     
     def _save_image(self, image: np.ndarray, output_path: str) -> bool:

@@ -172,7 +172,20 @@ class CombinedUploadForm(forms.Form):
         })
     )
     
-    # Processing parameters
+    # Conversion type selection
+    CONVERSION_TYPE_CHOICES = [
+        ('dotting', 'Dotting Conversion (Pointillism Effect)'),
+        ('pencil_sketch', 'Pencil Sketch Conversion'),
+    ]
+    
+    conversion_type = forms.ChoiceField(
+        choices=CONVERSION_TYPE_CHOICES,
+        initial='dotting',
+        help_text="Choose the type of image conversion",
+        widget=forms.Select(attrs={'class': 'form-control', 'id': 'conversion-type-select'})
+    )
+    
+    # Processing parameters for dotting
     COLOR_MODE_CHOICES = [
         ('black_on_white', 'Black dots on white background'),
         ('white_on_black', 'White dots on black background'),

@@ -1,12 +1,22 @@
 {% extends 'converter/base.html' %}
 
-{% block title %}Conversion Results - Image Dotting Converter{% endblock %}
+{% block title %}Conversion Results - Image Converter{% endblock %}
 
-{% block header %}Dotting Conversion Results{% endblock %}
+{% block header %}
+    {% if conversion_type == 'pencil_sketch' %}
+        Pencil Sketch Conversion Results
+    {% else %}
+        Dotting Conversion Results
+    {% endif %}
+{% endblock %}
 
 {% block content %}
 <div class="results-section">
-    <p>Your image has been successfully converted to a dotted artistic representation!</p>
+    {% if conversion_type == 'pencil_sketch' %}
+        <p>Your image has been successfully converted to a realistic pencil sketch!</p>
+    {% else %}
+        <p>Your image has been successfully converted to a dotted artistic representation!</p>
+    {% endif %}
     
     <div class="image-comparison">
         <div class="image-container">
@@ -15,41 +25,66 @@
         </div>
         
         <div class="image-container">
-            <div class="image-title">Dotted Version</div>
-            <img src="{{ dotted_image_url }}" alt="Dotted Image">
+            {% if conversion_type == 'pencil_sketch' %}
+                <div class="image-title">Pencil Sketch</div>
+                <img src="{{ converted_image_url }}" alt="Pencil Sketch">
+            {% else %}
+                <div class="image-title">Dotted Version</div>
+                <img src="{{ converted_image_url }}" alt="Dotted Image">
+            {% endif %}
         </div>
     </div>
     
-    <div class="parameters-summary">
-        <h3>Processing Parameters Used:</h3>
-        <div class="param-item">
-            <span class="param-label">Dot Spacing:</span>
-            <span class="param-value">{{ processing_params.dot_spacing }} pixels</span>
+    {% if conversion_type == 'dotting' and processing_params %}
+        <div class="parameters-summary">
+            <h3>Processing Parameters Used:</h3>
+            <div class="param-item">
+                <span class="param-label">Dot Spacing:</span>
+                <span class="param-value">{{ processing_params.dot_spacing }} pixels</span>
+            </div>
+            <div class="param-item">
+                <span class="param-label">Minimum Dot Radius:</span>
+                <span class="param-value">{{ processing_params.min_dot_radius }} pixels</span>
+            </div>
+            <div class="param-item">
+                <span class="param-label">Maximum Dot Radius:</span>
+                <span class="param-value">{{ processing_params.max_dot_radius }} pixels</span>
+            </div>
+            <div class="param-item">
+                <span class="param-label">Color Mode:</span>
+                <span class="param-value">
+                    {% if processing_params.color_mode == 'black_on_white' %}
+                        Black dots on white background
+                    {% else %}
+                        White dots on black background
+                    {% endif %}
+                </span>
+            </div>
         </div>
-        <div class="param-item">
-            <span class="param-label">Minimum Dot Radius:</span>
-            <span class="param-value">{{ processing_params.min_dot_radius }} pixels</span>
+    {% elif conversion_type == 'pencil_sketch' %}
+        <div class="parameters-summary">
+            <h3>Conversion Details:</h3>
+            <div class="param-item">
+                <span class="param-label">Conversion Type:</span>
+                <span class="param-value">Realistic Pencil Sketch</span>
+            </div>
+            <div class="param-item">
+                <span class="param-label">Processing:</span>
+                <span class="param-value">Grayscale conversion, edge enhancement, and artistic blending</span>
+            </div>
         </div>
-        <div class="param-item">
-            <span class="param-label">Maximum Dot Radius:</span>
-            <span class="param-value">{{ processing_params.max_dot_radius }} pixels</span>
-        </div>
-        <div class="param-item">
-            <span class="param-label">Color Mode:</span>
-            <span class="param-value">
-                {% if processing_params.color_mode == 'black_on_white' %}
-                    Black dots on white background
-                {% else %}
-                    White dots on black background
-                {% endif %}
-            </span>
-        </div>
-    </div>
+    {% endif %}
     
     <div class="navigation">
-        <a href="{% url 'converter:download' download_filename %}" class="btn btn-success">
-            Download Dotted Image
-        </a>
+        {% if conversion_type == 'pencil_sketch' %}
+            <a href="{% url 'converter:download' download_filename %}" class="btn btn-success">
+                Download Pencil Sketch
+            </a>
+        {% else %}
+            <a href="{% url 'converter:download' download_filename %}" class="btn btn-success">
+                Download Dotted Image
+            </a>
+        {% endif %}
         <a href="{% url 'converter:upload' %}" class="btn">
             Convert Another Image
         </a>

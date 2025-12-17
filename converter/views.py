@@ -16,7 +16,7 @@ from django.urls import reverse
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
 from .forms import CombinedUploadForm
-from .image_processor import ImageProcessor, ProcessingParameters
+from .image_processor import ImageProcessor, ProcessingParameters, PencilSketchProcessor
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -65,6 +65,7 @@ class UploadView(View):
                 
                 # Store processing parameters and file path in session
                 request.session['uploaded_file_path'] = saved_path
+                request.session['conversion_type'] = form.cleaned_data['conversion_type']
                 request.session['processing_params'] = {
                     'dot_spacing': form.cleaned_data['dot_spacing'],
                     'min_dot_radius': form.cleaned_data['min_dot_radius'],
@@ -148,6 +149,7 @@ class UploadView(View):
             request.session.pop('uploaded_file_path', None)
             request.session.pop('output_file_path', None)
             request.session.pop('processing_params', None)
+            request.session.pop('conversion_type', None)
             
         except Exception as e:
             logger.warning(f"Error during session cleanup: {str(e)}")
@@ -160,10 +162,16 @@ class ProcessView(View):
         """Process the uploaded image and display results."""
         # Check if we have required session data
         uploaded_file_path = request.session.get('uploaded_file_path')
+        conversion_type = request.session.get('conversion_type', 'dotting')
         processing_params = request.session.get('processing_params')
         
-        if not uploaded_file_path or not processing_params:
+        if not uploaded_file_path:
             messages.error(request, "No image uploaded. Please upload an image first.")
+            return redirect('converter:upload')
+        
+        # For pencil sketch, we don't need processing params
+        if conversion_type == 'dotting' and not processing_params:
+            messages.error(request, "No processing parameters found. Please upload an image first.")
             return redirect('converter:upload')
         
         # Verify input file still exists
@@ -173,23 +181,29 @@ class ProcessView(View):
             return redirect('converter:upload')
         
         try:
-            # Add progress feedback
-            messages.info(request, "Processing image... This may take a moment.")
-            
-            # Create processing parameters object with validation
-            params = self._create_validated_parameters(processing_params)
-            if not params:
-                messages.error(request, "Invalid processing parameters. Please try again.")
-                return redirect('converter:upload')
-            
-            # Create processor
-            processor = ImageProcessor(params)
+            # Add progress feedback based on conversion type
+            if conversion_type == 'pencil_sketch':
+                messages.info(request, "Converting to pencil sketch... This may take a moment.")
+            else:
+                messages.info(request, "Processing image... This may take a moment.")
             
             # Generate output filename with timestamp for uniqueness
             input_filename = os.path.basename(uploaded_file_path)
             name, ext = os.path.splitext(input_filename)
             timestamp = str(int(uuid.uuid4().int))[:8]
-            output_filename = f"dotted_{name}_{timestamp}{ext}"
+            
+            if conversion_type == 'pencil_sketch':
+                output_filename = f"sketch_{name}_{timestamp}{ext}"
+                processor = PencilSketchProcessor()
+            else:
+                # Create processing parameters object with validation
+                params = self._create_validated_parameters(processing_params)
+                if not params:
+                    messages.error(request, "Invalid processing parameters. Please try again.")
+                    return redirect('converter:upload')
+                
+                output_filename = f"dotted_{name}_{timestamp}{ext}"
+                processor = ImageProcessor(params)
             
             # Get full paths
             output_path = os.path.join('output', output_filename)
@@ -214,14 +228,18 @@ class ProcessView(View):
                 # Log successful processing
                 logger.info(f"Image processed successfully: {output_path}")
                 
-                # Add success message
-                messages.success(request, "Image converted successfully!")
+                # Add success message based on conversion type
+                if conversion_type == 'pencil_sketch':
+                    messages.success(request, "Image converted to pencil sketch successfully!")
+                else:
+                    messages.success(request, "Image converted to dots successfully!")
                 
                 # Prepare context for template
                 context = {
                     'original_image_url': settings.MEDIA_URL + uploaded_file_path,
-                    'dotted_image_url': settings.MEDIA_URL + output_path,
+                    'converted_image_url': settings.MEDIA_URL + output_path,
                     'download_filename': output_filename,
+                    'conversion_type': conversion_type,
                     'processing_params': processing_params,
                 }
                 

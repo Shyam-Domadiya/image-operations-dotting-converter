@@ -2,11 +2,11 @@
 
 {% block title %}Upload Image - Image Dotting Converter{% endblock %}
 
-{% block header %}Upload Image for Dotting Conversion{% endblock %}
+{% block header %}Upload Image for Conversion{% endblock %}
 
 {% block content %}
 <div class="upload-section">
-    <p>Upload a PNG or JPG image and configure the dotting parameters to create an artistic pointillism effect.</p>
+    <p>Upload any image and choose your conversion type: create an artistic pointillism effect with dotting conversion or transform your photo into a realistic pencil sketch.</p>
     
     <form method="post" enctype="multipart/form-data">
         {% csrf_token %}
@@ -27,63 +27,82 @@
         </div>
         
         <div class="form-group">
-            <label for="{{ form.dot_spacing.id_for_label }}">{{ form.dot_spacing.label }}</label>
-            {{ form.dot_spacing }}
-            {% if form.dot_spacing.help_text %}
-                <div class="help-text">{{ form.dot_spacing.help_text }}</div>
+            <label for="{{ form.conversion_type.id_for_label }}">{{ form.conversion_type.label }}</label>
+            {{ form.conversion_type }}
+            {% if form.conversion_type.help_text %}
+                <div class="help-text">{{ form.conversion_type.help_text }}</div>
             {% endif %}
-            {% if form.dot_spacing.errors %}
+            {% if form.conversion_type.errors %}
                 <ul class="errorlist">
-                    {% for error in form.dot_spacing.errors %}
+                    {% for error in form.conversion_type.errors %}
                         <li>{{ error }}</li>
                     {% endfor %}
                 </ul>
             {% endif %}
         </div>
         
-        <div class="form-group">
-            <label for="{{ form.min_dot_radius.id_for_label }}">{{ form.min_dot_radius.label }}</label>
-            {{ form.min_dot_radius }}
-            {% if form.min_dot_radius.help_text %}
-                <div class="help-text">{{ form.min_dot_radius.help_text }}</div>
-            {% endif %}
-            {% if form.min_dot_radius.errors %}
-                <ul class="errorlist">
-                    {% for error in form.min_dot_radius.errors %}
-                        <li>{{ error }}</li>
-                    {% endfor %}
-                </ul>
-            {% endif %}
-        </div>
-        
-        <div class="form-group">
-            <label for="{{ form.max_dot_radius.id_for_label }}">{{ form.max_dot_radius.label }}</label>
-            {{ form.max_dot_radius }}
-            {% if form.max_dot_radius.help_text %}
-                <div class="help-text">{{ form.max_dot_radius.help_text }}</div>
-            {% endif %}
-            {% if form.max_dot_radius.errors %}
-                <ul class="errorlist">
-                    {% for error in form.max_dot_radius.errors %}
-                        <li>{{ error }}</li>
-                    {% endfor %}
-                </ul>
-            {% endif %}
-        </div>
-        
-        <div class="form-group">
-            <label for="{{ form.color_mode.id_for_label }}">{{ form.color_mode.label }}</label>
-            {{ form.color_mode }}
-            {% if form.color_mode.help_text %}
-                <div class="help-text">{{ form.color_mode.help_text }}</div>
-            {% endif %}
-            {% if form.color_mode.errors %}
-                <ul class="errorlist">
-                    {% for error in form.color_mode.errors %}
-                        <li>{{ error }}</li>
-                    {% endfor %}
-                </ul>
-            {% endif %}
+        <div id="dotting-parameters" class="dotting-params">
+            <h4>Dotting Parameters</h4>
+            
+            <div class="form-group">
+                <label for="{{ form.dot_spacing.id_for_label }}">{{ form.dot_spacing.label }}</label>
+                {{ form.dot_spacing }}
+                {% if form.dot_spacing.help_text %}
+                    <div class="help-text">{{ form.dot_spacing.help_text }}</div>
+                {% endif %}
+                {% if form.dot_spacing.errors %}
+                    <ul class="errorlist">
+                        {% for error in form.dot_spacing.errors %}
+                            <li>{{ error }}</li>
+                        {% endfor %}
+                    </ul>
+                {% endif %}
+            </div>
+            
+            <div class="form-group">
+                <label for="{{ form.min_dot_radius.id_for_label }}">{{ form.min_dot_radius.label }}</label>
+                {{ form.min_dot_radius }}
+                {% if form.min_dot_radius.help_text %}
+                    <div class="help-text">{{ form.min_dot_radius.help_text }}</div>
+                {% endif %}
+                {% if form.min_dot_radius.errors %}
+                    <ul class="errorlist">
+                        {% for error in form.min_dot_radius.errors %}
+                            <li>{{ error }}</li>
+                        {% endfor %}
+                    </ul>
+                {% endif %}
+            </div>
+            
+            <div class="form-group">
+                <label for="{{ form.max_dot_radius.id_for_label }}">{{ form.max_dot_radius.label }}</label>
+                {{ form.max_dot_radius }}
+                {% if form.max_dot_radius.help_text %}
+                    <div class="help-text">{{ form.max_dot_radius.help_text }}</div>
+                {% endif %}
+                {% if form.max_dot_radius.errors %}
+                    <ul class="errorlist">
+                        {% for error in form.max_dot_radius.errors %}
+                            <li>{{ error }}</li>
+                        {% endfor %}
+                    </ul>
+                {% endif %}
+            </div>
+            
+            <div class="form-group">
+                <label for="{{ form.color_mode.id_for_label }}">{{ form.color_mode.label }}</label>
+                {{ form.color_mode }}
+                {% if form.color_mode.help_text %}
+                    <div class="help-text">{{ form.color_mode.help_text }}</div>
+                {% endif %}
+                {% if form.color_mode.errors %}
+                    <ul class="errorlist">
+                        {% for error in form.color_mode.errors %}
+                            <li>{{ error }}</li>
+                        {% endfor %}
+                    </ul>
+                {% endif %}
+            </div>
         </div>
         
         {% if form.non_field_errors %}
@@ -95,7 +114,7 @@
         {% endif %}
         
         <div class="form-group">
-            <button type="submit" class="btn">Convert to Dots</button>
+            <button type="submit" class="btn" id="submit-btn">Convert Image</button>
         </div>
     </form>
 </div>
@@ -104,9 +123,39 @@
     <h3>Instructions:</h3>
     <ul>
         <li><strong>Image Upload:</strong> Select any image file format (JPG, PNG, GIF, BMP, TIFF, WebP, ICO, PSD, SVG - max 10MB, any pixel size supported)</li>
-        <li><strong>Dot Spacing:</strong> Controls the density of dots (smaller = more dots)</li>
-        <li><strong>Dot Radius:</strong> Controls the size range of dots based on image brightness</li>
-        <li><strong>Color Mode:</strong> Choose between black dots on white background or white dots on black background</li>
+        <li><strong>Conversion Type:</strong> Choose between dotting conversion (pointillism effect) or pencil sketch conversion</li>
+        <li><strong>Dotting Parameters:</strong> (Only for dotting conversion)
+            <ul>
+                <li><strong>Dot Spacing:</strong> Controls the density of dots (smaller = more dots)</li>
+                <li><strong>Dot Radius:</strong> Controls the size range of dots based on image brightness</li>
+                <li><strong>Color Mode:</strong> Choose between black dots on white background or white dots on black background</li>
+            </ul>
+        </li>
+        <li><strong>Pencil Sketch:</strong> Automatically converts your photo into a realistic pencil sketch with no additional parameters needed</li>
     </ul>
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const conversionTypeSelect = document.getElementById('conversion-type-select');
+    const dottingParams = document.getElementById('dotting-parameters');
+    const submitBtn = document.getElementById('submit-btn');
+    
+    function toggleDottingParams() {
+        if (conversionTypeSelect.value === 'pencil_sketch') {
+            dottingParams.style.display = 'none';
+            submitBtn.textContent = 'Convert to Pencil Sketch';
+        } else {
+            dottingParams.style.display = 'block';
+            submitBtn.textContent = 'Convert to Dots';
+        }
+    }
+    
+    // Initial toggle
+    toggleDottingParams();
+    
+    // Toggle on change
+    conversionTypeSelect.addEventListener('change', toggleDottingParams);
+});
+</script>
 {% endblock %}
