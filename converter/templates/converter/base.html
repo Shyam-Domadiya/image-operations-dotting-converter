@@ -1,0 +1,51 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Image Dotting Converter{% endblock %}</title>
+    <link rel="stylesheet" href="{% static 'css/style.css' %}">
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    <div class="container">
+        <h1>{% block header %}Image Dotting Converter{% endblock %}</h1>
+        
+        {% if messages %}
+            {% for message in messages %}
+                <div class="alert alert-{% if message.tags == 'error' %}error{% elif message.tags == 'success' %}success{% elif message.tags == 'info' %}info{% else %}{{ message.tags }}{% endif %}" id="message-{{ forloop.counter }}">
+                    {{ message }}
+                    <button type="button" class="close-btn" onclick="closeMessage({{ forloop.counter }})">&times;</button>
+                </div>
+            {% endfor %}
+        {% endif %}
+        
+        {% block content %}
+        {% endblock %}
+    </div>
+    
+    <script>
+    // Close message function
+    function closeMessage(messageId) {
+        const messageElement = document.getElementById('message-' + messageId);
+        if (messageElement) {
+            messageElement.style.display = 'none';
+        }
+    }
+    
+    // Auto-hide success and info messages after 5 seconds
+    document.addEventListener('DOMContentLoaded', function() {
+        const messages = document.querySelectorAll('.alert-success, .alert-info');
+        messages.forEach(function(message) {
+            setTimeout(function() {
+                message.style.opacity = '0';
+                setTimeout(function() {
+                    message.style.display = 'none';
+                }, 300);
+            }, 5000);
+        });
+    });
+    </script>
+</body>
+</html>

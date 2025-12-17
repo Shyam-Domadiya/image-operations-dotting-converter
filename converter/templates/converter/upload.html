@@ -1,0 +1,112 @@
+{% extends 'converter/base.html' %}
+
+{% block title %}Upload Image - Image Dotting Converter{% endblock %}
+
+{% block header %}Upload Image for Dotting Conversion{% endblock %}
+
+{% block content %}
+<div class="upload-section">
+    <p>Upload a PNG or JPG image and configure the dotting parameters to create an artistic pointillism effect.</p>
+    
+    <form method="post" enctype="multipart/form-data">
+        {% csrf_token %}
+        
+        <div class="form-group">
+            <label for="{{ form.image.id_for_label }}">{{ form.image.label }}</label>
+            {{ form.image }}
+            {% if form.image.help_text %}
+                <div class="help-text">{{ form.image.help_text }}</div>
+            {% endif %}
+            {% if form.image.errors %}
+                <ul class="errorlist">
+                    {% for error in form.image.errors %}
+                        <li>{{ error }}</li>
+                    {% endfor %}
+                </ul>
+            {% endif %}
+        </div>
+        
+        <div class="form-group">
+            <label for="{{ form.dot_spacing.id_for_label }}">{{ form.dot_spacing.label }}</label>
+            {{ form.dot_spacing }}
+            {% if form.dot_spacing.help_text %}
+                <div class="help-text">{{ form.dot_spacing.help_text }}</div>
+            {% endif %}
+            {% if form.dot_spacing.errors %}
+                <ul class="errorlist">
+                    {% for error in form.dot_spacing.errors %}
+                        <li>{{ error }}</li>
+                    {% endfor %}
+                </ul>
+            {% endif %}
+        </div>
+        
+        <div class="form-group">
+            <label for="{{ form.min_dot_radius.id_for_label }}">{{ form.min_dot_radius.label }}</label>
+            {{ form.min_dot_radius }}
+            {% if form.min_dot_radius.help_text %}
+                <div class="help-text">{{ form.min_dot_radius.help_text }}</div>
+            {% endif %}
+            {% if form.min_dot_radius.errors %}
+                <ul class="errorlist">
+                    {% for error in form.min_dot_radius.errors %}
+                        <li>{{ error }}</li>
+                    {% endfor %}
+                </ul>
+            {% endif %}
+        </div>
+        
+        <div class="form-group">
+            <label for="{{ form.max_dot_radius.id_for_label }}">{{ form.max_dot_radius.label }}</label>
+            {{ form.max_dot_radius }}
+            {% if form.max_dot_radius.help_text %}
+                <div class="help-text">{{ form.max_dot_radius.help_text }}</div>
+            {% endif %}
+            {% if form.max_dot_radius.errors %}
+                <ul class="errorlist">
+                    {% for error in form.max_dot_radius.errors %}
+                        <li>{{ error }}</li>
+                    {% endfor %}
+                </ul>
+            {% endif %}
+        </div>
+        
+        <div class="form-group">
+            <label for="{{ form.color_mode.id_for_label }}">{{ form.color_mode.label }}</label>
+            {{ form.color_mode }}
+            {% if form.color_mode.help_text %}
+                <div class="help-text">{{ form.color_mode.help_text }}</div>
+            {% endif %}
+            {% if form.color_mode.errors %}
+                <ul class="errorlist">
+                    {% for error in form.color_mode.errors %}
+                        <li>{{ error }}</li>
+                    {% endfor %}
+                </ul>
+            {% endif %}
+        </div>
+        
+        {% if form.non_field_errors %}
+            <ul class="errorlist">
+                {% for error in form.non_field_errors %}
+                    <li>{{ error }}</li>
+                {% endfor %}
+            </ul>
+        {% endif %}
+        
+        <div class="form-group">
+            <button type="submit" class="btn">Convert to Dots</button>
+        </div>
+    </form>
+</div>
+
+<div class="instructions">
+    <h3>Instructions:</h3>
+    <ul>
+        <li><strong>Image Upload:</strong> Select any image file format (JPG, PNG, GIF, BMP, TIFF, WebP, ICO, PSD, SVG - max 10MB, any pixel size supported)</li>
+        <li><strong>Dot Spacing:</strong> Controls the density of dots (smaller = more dots)</li>
+        <li><strong>Dot Radius:</strong> Controls the size range of dots based on image brightness</li>
+        <li><strong>Color Mode:</strong> Choose between black dots on white background or white dots on black background</li>
+    </ul>
+</div>
+{% endblock %}

@@ -1,0 +1,58 @@
+{% extends 'converter/base.html' %}
+
+{% block title %}Conversion Results - Image Dotting Converter{% endblock %}
+
+{% block header %}Dotting Conversion Results{% endblock %}
+
+{% block content %}
+<div class="results-section">
+    <p>Your image has been successfully converted to a dotted artistic representation!</p>
+    
+    <div class="image-comparison">
+        <div class="image-container">
+            <div class="image-title">Original Image</div>
+            <img src="{{ original_image_url }}" alt="Original Image">
+        </div>
+        
+        <div class="image-container">
+            <div class="image-title">Dotted Version</div>
+            <img src="{{ dotted_image_url }}" alt="Dotted Image">
+        </div>
+    </div>
+    
+    <div class="parameters-summary">
+        <h3>Processing Parameters Used:</h3>
+        <div class="param-item">
+            <span class="param-label">Dot Spacing:</span>
+            <span class="param-value">{{ processing_params.dot_spacing }} pixels</span>
+        </div>
+        <div class="param-item">
+            <span class="param-label">Minimum Dot Radius:</span>
+            <span class="param-value">{{ processing_params.min_dot_radius }} pixels</span>
+        </div>
+        <div class="param-item">
+            <span class="param-label">Maximum Dot Radius:</span>
+            <span class="param-value">{{ processing_params.max_dot_radius }} pixels</span>
+        </div>
+        <div class="param-item">
+            <span class="param-label">Color Mode:</span>
+            <span class="param-value">
+                {% if processing_params.color_mode == 'black_on_white' %}
+                    Black dots on white background
+                {% else %}
+                    White dots on black background
+                {% endif %}
+            </span>
+        </div>
+    </div>
+    
+    <div class="navigation">
+        <a href="{% url 'converter:download' download_filename %}" class="btn btn-success">
+            Download Dotted Image
+        </a>
+        <a href="{% url 'converter:upload' %}" class="btn">
+            Convert Another Image
+        </a>
+    </div>
+</div>
+{% endblock %}

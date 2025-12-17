@@ -1,0 +1,59 @@
+{% extends 'converter/base.html' %}
+
+{% block title %}Processing Image - Image Dotting Converter{% endblock %}
+
+{% block header %}Processing Your Image{% endblock %}
+
+{% block extra_css %}
+<style>
+.progress-container {
+    text-align: center;
+    padding: 2rem;
+}
+
+.progress-spinner {
+    border: 4px solid #f3f3f3;
+    border-top: 4px solid #3498db;
+    border-radius: 50%;
+    width: 50px;
+    height: 50px;
+    animation: spin 1s linear infinite;
+    margin: 0 auto 1rem;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.progress-message {
+    font-size: 1.2rem;
+    color: #666;
+    margin-bottom: 1rem;
+}
+
+.progress-details {
+    font-size: 0.9rem;
+    color: #888;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="progress-container">
+    <div class="progress-spinner"></div>
+    <div class="progress-message">
+        Converting your image to dotted art...
+    </div>
+    <div class="progress-details">
+        This may take a few moments depending on image size and complexity.
+    </div>
+</div>
+
+<script>
+// Auto-refresh to check processing status
+setTimeout(function() {
+    window.location.reload();
+}, 3000);
+</script>
+{% endblock %}
