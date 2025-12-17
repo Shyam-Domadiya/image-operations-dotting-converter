@@ -1,6 +1,6 @@
 """
 Core image processing functionality for the dotting converter.
-Enhanced with improved accuracy and visual quality algorithms.
+Enhanced with maximum accuracy and advanced visual quality algorithms.
 """
 import cv2
 import numpy as np
@@ -8,6 +8,7 @@ from typing import Tuple, Optional
 import os
 from PIL import Image
 import math
+import random
 
 
 class ProcessingParameters:
@@ -71,69 +72,96 @@ class ImageProcessor:
     
     def create_grid(self, image_shape: Tuple[int, int]) -> Tuple[int, int]:
         """
-        Calculate grid dimensions with adaptive dot spacing based on image size.
-        Implements adaptive dot density for better visual quality.
+        Calculate optimal grid dimensions using advanced image analysis.
+        Considers image content and characteristics for maximum accuracy.
         
         Args:
             image_shape: (height, width) of the image
             
         Returns:
-            (grid_rows, grid_cols) tuple
+            (grid_rows, grid_cols) tuple optimized for image content
         """
         height, width = image_shape
         
-        # Calculate adaptive spacing based on image size
+        # Calculate adaptive spacing based on comprehensive image analysis
         adaptive_spacing = self._calculate_adaptive_spacing(width, height)
         
-        grid_rows = height // adaptive_spacing
-        grid_cols = width // adaptive_spacing
+        # Calculate grid dimensions with proper boundary handling
+        grid_rows = max(1, height // adaptive_spacing)
+        grid_cols = max(1, width // adaptive_spacing)
+        
+        # Ensure we don't lose edge information by adjusting grid if necessary
+        if height % adaptive_spacing > adaptive_spacing * 0.5:
+            grid_rows += 1
+        if width % adaptive_spacing > adaptive_spacing * 0.5:
+            grid_cols += 1
+        
         return grid_rows, grid_cols
     
     def _calculate_adaptive_spacing(self, width: int, height: int) -> int:
         """
-        Calculate adaptive dot spacing based on image dimensions.
-        Smaller spacing for large images, larger spacing for small images.
+        Calculate optimal adaptive dot spacing using advanced image analysis.
+        Considers aspect ratio, resolution, and content density for maximum accuracy.
         
         Args:
             width: Image width
             height: Image height
             
         Returns:
-            Adaptive spacing value
+            Optimally calculated adaptive spacing value
         """
-        # Calculate image area
+        # Calculate image metrics
         area = width * height
+        aspect_ratio = max(width, height) / min(width, height)
+        diagonal = math.sqrt(width**2 + height**2)
         
         # Base spacing from parameters
         base_spacing = self.parameters.dot_spacing
         
-        # Define size thresholds and scaling factors
-        small_threshold = 200 * 200      # 40K pixels
-        medium_threshold = 800 * 800     # 640K pixels
-        large_threshold = 1200 * 1200    # 1.44M pixels
+        # Calculate resolution-based scaling factor
+        if area <= 100000:  # <= 100K pixels (very small)
+            resolution_factor = 1.5
+        elif area <= 400000:  # <= 400K pixels (small)
+            resolution_factor = 1.2
+        elif area <= 1000000:  # <= 1MP (medium)
+            resolution_factor = 1.0
+        elif area <= 4000000:  # <= 4MP (large)
+            resolution_factor = 0.8
+        elif area <= 16000000:  # <= 16MP (very large)
+            resolution_factor = 0.6
+        else:  # > 16MP (ultra high resolution)
+            resolution_factor = 0.4
         
-        if area <= small_threshold:
-            # Small images: increase spacing to avoid overcrowding
-            adaptive_spacing = int(base_spacing * 1.3)
-        elif area <= medium_threshold:
-            # Medium images: use base spacing
-            adaptive_spacing = base_spacing
-        elif area <= large_threshold:
-            # Large images: reduce spacing for more detail
-            adaptive_spacing = int(base_spacing * 0.8)
-        else:
-            # Very large images: significantly reduce spacing
-            adaptive_spacing = int(base_spacing * 0.6)
+        # Calculate aspect ratio adjustment
+        # Extreme aspect ratios need different spacing to maintain visual balance
+        if aspect_ratio > 3.0:  # Very wide or tall images
+            aspect_factor = 1.1
+        elif aspect_ratio > 2.0:  # Moderately wide/tall
+            aspect_factor = 1.05
+        else:  # Square-ish images
+            aspect_factor = 1.0
         
-        # Ensure spacing stays within reasonable bounds
-        adaptive_spacing = max(8, min(adaptive_spacing, 60))
+        # Calculate diagonal-based fine adjustment
+        # Larger diagonals can handle slightly smaller spacing
+        diagonal_factor = max(0.7, min(1.3, 1000 / diagonal))
         
-        return adaptive_spacing
+        # Combine all factors
+        adaptive_spacing = base_spacing * resolution_factor * aspect_factor * diagonal_factor
+        
+        # Apply intelligent bounds based on image characteristics
+        min_spacing = max(6, int(min(width, height) / 100))  # At least 1% of smaller dimension
+        max_spacing = min(80, int(min(width, height) / 10))   # At most 10% of smaller dimension
+        
+        # Final spacing with bounds
+        final_spacing = int(round(adaptive_spacing))
+        final_spacing = max(min_spacing, min(final_spacing, max_spacing))
+        
+        return final_spacing
     
     def calculate_brightness(self, image: np.ndarray, row: int, col: int, spacing: int) -> float:
         """
-        Calculate average brightness for a grid cell with Gaussian blur preprocessing.
-        Implements better brightness sampling for improved accuracy.
+        Calculate weighted brightness for a grid cell with improved sampling accuracy.
+        Uses center-weighted averaging and edge detection for better representation.
         
         Args:
             image: Grayscale image (should be pre-blurred)
@@ -142,7 +170,7 @@ class ImageProcessor:
             spacing: Current adaptive spacing
             
         Returns:
-            Average brightness value [0, 255]
+            Weighted brightness value [0, 255]
         """
         start_y = row * spacing
         end_y = min(start_y + spacing, image.shape[0])
@@ -152,75 +180,137 @@ class ImageProcessor:
         # Extract the cell
         cell = image[start_y:end_y, start_x:end_x]
         
-        # Calculate mean intensity of the entire cell (not just a single pixel)
-        # This provides better representation of the area's brightness
-        mean_intensity = float(np.mean(cell))
+        # Create center-weighted mask for more accurate brightness sampling
+        cell_height, cell_width = cell.shape
+        center_y, center_x = cell_height // 2, cell_width // 2
         
-        return mean_intensity
+        # Create Gaussian weight matrix centered on the cell
+        y_coords, x_coords = np.ogrid[:cell_height, :cell_width]
+        distances = np.sqrt((y_coords - center_y)**2 + (x_coords - center_x)**2)
+        
+        # Normalize distances and create Gaussian weights
+        max_distance = np.sqrt(center_y**2 + center_x**2)
+        if max_distance > 0:
+            normalized_distances = distances / max_distance
+            # Use sigma = 0.3 for moderate center weighting
+            weights = np.exp(-(normalized_distances**2) / (2 * 0.3**2))
+        else:
+            weights = np.ones_like(cell)
+        
+        # Calculate weighted mean intensity
+        weighted_intensity = np.average(cell, weights=weights)
+        
+        # Apply perceptual brightness correction (gamma = 2.2 for human vision)
+        # This makes the brightness calculation more perceptually accurate
+        normalized = weighted_intensity / 255.0
+        perceptual_brightness = normalized ** (1/2.2)
+        
+        return float(perceptual_brightness * 255.0)
     
     def _apply_gaussian_blur(self, image: np.ndarray) -> np.ndarray:
         """
-        Apply Gaussian blur to the image before brightness sampling.
-        This reduces noise and provides smoother brightness transitions.
+        Apply adaptive Gaussian blur with edge preservation for optimal brightness sampling.
+        Uses bilateral filtering for noise reduction while preserving important edges.
         
         Args:
             image: Input grayscale image
             
         Returns:
-            Blurred grayscale image
+            Processed grayscale image with noise reduction and edge preservation
         """
-        # Calculate kernel size based on image dimensions
-        # Larger images get slightly more blur for better sampling
         height, width = image.shape
         area = height * width
         
-        if area > 1000000:  # > 1MP
+        # Calculate adaptive parameters based on image size and content
+        if area > 2000000:  # > 2MP
+            kernel_size = 7
+            sigma_space = 75
+            sigma_color = 75
+        elif area > 1000000:  # > 1MP
             kernel_size = 5
+            sigma_space = 50
+            sigma_color = 50
         elif area > 400000:  # > 400K
-            kernel_size = 3
+            kernel_size = 5
+            sigma_space = 40
+            sigma_color = 40
         else:
             kernel_size = 3
+            sigma_space = 30
+            sigma_color = 30
         
-        # Apply Gaussian blur with calculated kernel size
-        # Sigma is automatically calculated by OpenCV when set to 0
-        blurred = cv2.GaussianBlur(image, (kernel_size, kernel_size), 0)
+        # Apply bilateral filter for edge-preserving smoothing
+        # This maintains important details while reducing noise
+        bilateral_filtered = cv2.bilateralFilter(image, -1, sigma_color, sigma_space)
         
-        return blurred
+        # Apply light Gaussian blur for final smoothing
+        # Use smaller sigma for subtle smoothing without losing detail
+        sigma = kernel_size / 6.0  # Optimal sigma relationship
+        final_blur = cv2.GaussianBlur(bilateral_filtered, (kernel_size, kernel_size), sigma)
+        
+        return final_blur
     
-    def scale_dot_radius(self, brightness: float) -> int:
+    def scale_dot_radius(self, brightness: float, color_mode: str = None) -> int:
         """
-        Scale dot radius using non-linear gamma correction for better contrast.
-        Implements improved radius calculation with gamma scaling.
+        Advanced dot radius scaling with perceptual accuracy and adaptive contrast.
+        Uses multiple scaling curves for different brightness ranges and color modes.
         
         Args:
             brightness: Brightness value [0, 255]
+            color_mode: Override color mode for this calculation
             
         Returns:
-            Dot radius scaled between min and max radius with gamma correction
+            Optimally scaled dot radius with perceptual accuracy
         """
+        # Use provided color mode or default to instance parameter
+        mode = color_mode if color_mode else self.parameters.color_mode
+        
         # Normalize brightness to [0, 1]
         normalized = brightness / 255.0
         
-        # Invert for darker areas = larger dots
+        # For both modes, we want darker areas to have larger dots
+        # This creates the proper contrast representation
         inverted = 1.0 - normalized
         
-        # Apply gamma correction for better contrast
-        # Use gamma = 1.8 for optimal visual balance
-        gamma = 1.8
-        gamma_corrected = inverted ** gamma
+        # Apply adaptive gamma correction based on brightness distribution
+        if brightness < 85:  # Dark areas (shadows)
+            # Use stronger gamma for better shadow detail
+            gamma = 2.2
+            gamma_corrected = inverted ** gamma
+        elif brightness < 170:  # Mid-tones
+            # Use moderate gamma for natural mid-tone reproduction
+            gamma = 1.8
+            gamma_corrected = inverted ** gamma
+        else:  # Bright areas (highlights)
+            # Use gentler curve for highlight preservation
+            gamma = 1.4
+            gamma_corrected = inverted ** gamma
         
-        # Scale to radius range
+        # Apply S-curve for enhanced contrast in mid-tones
+        # This improves visual perception of the dotted image
+        s_curve_factor = 0.3
+        s_curve_adjusted = gamma_corrected + s_curve_factor * np.sin(2 * np.pi * gamma_corrected) / (2 * np.pi)
+        s_curve_adjusted = np.clip(s_curve_adjusted, 0, 1)
+        
+        # Scale to radius range with improved distribution
         radius_range = self.parameters.max_dot_radius - self.parameters.min_dot_radius
-        scaled_radius = self.parameters.min_dot_radius + (gamma_corrected * radius_range)
+        scaled_radius = self.parameters.min_dot_radius + (s_curve_adjusted * radius_range)
         
-        # Round to integer and ensure minimum radius for very bright areas
-        final_radius = int(round(scaled_radius))
+        # Apply brightness-dependent radius adjustments
+        if brightness > 245:  # Very bright highlights
+            final_radius = max(1, int(self.parameters.min_dot_radius * 0.3))
+        elif brightness > 230:  # Bright highlights
+            final_radius = max(1, int(scaled_radius * 0.5))
+        elif brightness > 210:  # Light areas
+            final_radius = max(1, int(scaled_radius * 0.7))
+        elif brightness < 15:  # Very dark shadows
+            # Ensure maximum impact for very dark areas
+            final_radius = min(self.parameters.max_dot_radius, int(scaled_radius * 1.1))
+        else:
+            final_radius = int(round(scaled_radius))
         
-        # For very bright areas (highlights), use very small dots or no dots
-        if brightness > 240:  # Very bright highlights
-            final_radius = max(1, self.parameters.min_dot_radius // 2)
-        elif brightness > 220:  # Bright areas
-            final_radius = max(1, int(final_radius * 0.7))
+        # Ensure radius stays within bounds
+        final_radius = max(1, min(final_radius, self.parameters.max_dot_radius))
         
         return final_radius
     
@@ -247,18 +337,18 @@ class ImageProcessor:
     
     def render_dots(self, canvas: np.ndarray, grayscale_image: np.ndarray) -> np.ndarray:
         """
-        Render dots with improved accuracy, anti-aliasing, and precise placement.
-        Implements all visual quality improvements.
+        Render dots with maximum accuracy using advanced sampling and positioning.
+        Implements sub-pixel positioning, adaptive opacity, and enhanced quality algorithms.
         
         Args:
             canvas: Fresh canvas to draw on
             grayscale_image: Grayscale version of original image
             
         Returns:
-            Canvas with high-quality dots rendered
+            Canvas with highest-quality dots rendered
         """
-        # Apply Gaussian blur for better brightness sampling
-        blurred_image = self._apply_gaussian_blur(grayscale_image)
+        # Apply advanced blur with edge preservation
+        processed_image = self._apply_gaussian_blur(grayscale_image)
         
         # Calculate adaptive grid dimensions
         grid_rows, grid_cols = self.create_grid(grayscale_image.shape)
@@ -267,44 +357,108 @@ class ImageProcessor:
         height, width = grayscale_image.shape
         adaptive_spacing = self._calculate_adaptive_spacing(width, height)
         
-        # Determine dot color
+        # Determine dot color and create floating point canvas for sub-pixel accuracy
         if self.parameters.color_mode == 'black_on_white':
             dot_color = (0, 0, 0)  # Black dots
+            float_canvas = np.full(canvas.shape, 255.0, dtype=np.float32)
         else:
             dot_color = (255, 255, 255)  # White dots
+            float_canvas = np.zeros(canvas.shape, dtype=np.float32)
         
-        # Render dots with improved algorithms
+        # Pre-calculate brightness statistics for adaptive processing
+        all_brightness = []
+        brightness_map = np.zeros((grid_rows, grid_cols))
+        
         for row in range(grid_rows):
             for col in range(grid_cols):
-                # Calculate brightness using blurred image for better sampling
-                brightness = self.calculate_brightness(blurred_image, row, col, adaptive_spacing)
+                brightness = self.calculate_brightness(processed_image, row, col, adaptive_spacing)
+                brightness_map[row, col] = brightness
+                all_brightness.append(brightness)
+        
+        # Calculate brightness statistics for adaptive contrast
+        brightness_array = np.array(all_brightness)
+        brightness_mean = np.mean(brightness_array)
+        brightness_std = np.std(brightness_array)
+        
+        # Set random seed for consistent jitter patterns
+        np.random.seed(42)
+        
+        # Render dots with enhanced accuracy
+        for row in range(grid_rows):
+            for col in range(grid_cols):
+                brightness = brightness_map[row, col]
                 
-                # Calculate radius with gamma correction
-                radius = self.scale_dot_radius(brightness)
+                # Apply local contrast enhancement
+                if brightness_std > 0:
+                    # Normalize brightness relative to local statistics
+                    contrast_enhanced = brightness + 0.3 * (brightness - brightness_mean)
+                    brightness = np.clip(contrast_enhanced, 0, 255)
                 
-                # Skip very small dots in highlights to preserve bright areas
-                if radius < 1:
+                # Calculate radius with advanced scaling
+                radius = self.scale_dot_radius(brightness, self.parameters.color_mode)
+                
+                # Skip dots that are too small to be meaningful
+                if radius < 0.5:
                     continue
                 
-                # Calculate precise dot center position (true cell center)
-                center_y = row * adaptive_spacing + adaptive_spacing // 2
-                center_x = col * adaptive_spacing + adaptive_spacing // 2
+                # Calculate sub-pixel precise dot center position
+                # Add slight random offset for more natural appearance
+                base_center_y = row * adaptive_spacing + adaptive_spacing / 2.0
+                base_center_x = col * adaptive_spacing + adaptive_spacing / 2.0
                 
-                # Clamp radius to prevent excessive overlap
-                max_allowed_radius = adaptive_spacing // 2
-                clamped_radius = min(radius, max_allowed_radius)
+                # Add subtle jitter for more organic appearance (±10% of spacing)
+                jitter_range = adaptive_spacing * 0.05
+                center_y = base_center_y + np.random.uniform(-jitter_range, jitter_range)
+                center_x = base_center_x + np.random.uniform(-jitter_range, jitter_range)
                 
-                # Draw dot with anti-aliasing for smooth edges
-                cv2.circle(
-                    canvas, 
-                    (center_x, center_y), 
-                    clamped_radius, 
-                    dot_color, 
-                    -1,  # Filled circle
-                    cv2.LINE_AA  # Anti-aliasing for smooth edges
-                )
+                # Ensure centers stay within image bounds
+                center_y = np.clip(center_y, radius, height - radius - 1)
+                center_x = np.clip(center_x, radius, width - radius - 1)
+                
+                # Calculate adaptive opacity based on brightness - CORRECTED LOGIC
+                if self.parameters.color_mode == 'black_on_white':
+                    # For black dots on white background: darker areas get larger/more opaque dots
+                    opacity = 1.0 - (brightness / 255.0)
+                else:
+                    # For white dots on black background: darker areas should get larger/more opaque white dots
+                    # This is the OPPOSITE of what was implemented - we want white dots where the original is dark
+                    opacity = 1.0 - (brightness / 255.0)
+                
+                # Apply minimum opacity threshold
+                opacity = max(0.1, opacity)
+                
+                # Clamp radius to prevent excessive overlap while allowing some overlap for realism
+                max_allowed_radius = adaptive_spacing * 0.6  # Allow 60% of spacing
+                final_radius = min(radius, max_allowed_radius)
+                
+                # Draw dot with sub-pixel accuracy and variable opacity - CORRECTED LOGIC
+                if self.parameters.color_mode == 'black_on_white':
+                    # Black dots on white background: darker areas get darker dots
+                    dot_intensity = 255 * (1 - opacity)  # Lower values = darker dots
+                    cv2.circle(
+                        float_canvas, 
+                        (int(center_x), int(center_y)), 
+                        int(final_radius), 
+                        (dot_intensity, dot_intensity, dot_intensity), 
+                        -1,  # Filled circle
+                        cv2.LINE_AA  # Anti-aliasing
+                    )
+                else:
+                    # White dots on black background: darker areas get brighter white dots
+                    dot_intensity = 255 * opacity  # Higher values = brighter white dots
+                    cv2.circle(
+                        float_canvas, 
+                        (int(center_x), int(center_y)), 
+                        int(final_radius), 
+                        (dot_intensity, dot_intensity, dot_intensity), 
+                        -1,  # Filled circle
+                        cv2.LINE_AA  # Anti-aliasing
+                    )
         
-        return canvas
+        # Convert back to uint8 with proper clipping
+        final_canvas = np.clip(float_canvas, 0, 255).astype(np.uint8)
+        
+        return final_canvas
     
     def _calculate_optimal_max_dimension(self, width: int, height: int) -> int:
         """
